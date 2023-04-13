@@ -14,13 +14,37 @@ const GetPackageData = async (packageId) => {
   return packageData.json();
 }
 
-const GetFormattedPackageData = async (packageId) => {
+const GetFormattedPackageData = async (packageId, installedPackages) => {
+
   let pd = await GetPackageData(packageId);
 
-  return "|" + pd["name"]
+  let installedVersion = installedPackages["node_modules/" + packageId]["version"]
+  let latestVersion = pd["dist-tags"]["latest"]
+  
+  let status;
+  if(installedVersion == latestVersion) {
+    status = "✔"
+  } else {
+    let installedVersionNumbers = installedVersion.split(".")
+    let latestVersionNumbers = latestVersion.split(".")
+
+    if (installedVersionNumbers[0] != latestVersionNumbers[0]) {
+      status = "❌"
+    } else if (installedVersionNumbers[1] != latestVersionNumbers[1]) {
+      status = "⚠"
+    } else if (installedVersionNumbers[2] != latestVersionNumbers[2]) {
+      status = "ℹ"
+    } else {
+      status = "❌";
+    }
+  }
+
+  return "|" + status
+    + "|" + pd["dist-tags"]["latest"]
+    + "|" + installedVersion
+    + "|" + pd["name"]
     + "|" + pd["description"]
     + "|" + pd["license"]
-    + "|" + "[Repository](" +  pd["repository"]["url"].replace("git+", "") + ")"
     + "|" + "[NPM](https://www.npmjs.com/package/" + pd["_id"] + ")"
     + "|" + "[Vulnerabilities](https://security.snyk.io/package/npm/" + packageId + ")"
     + "|";
@@ -28,13 +52,12 @@ const GetFormattedPackageData = async (packageId) => {
 
 const GetAllPackagesFormatted = async (packages, installedPackages) => {
 
+  console.log("Generating summary of packages")
+
   let packageMarkdown = {}
 
   await Promise.all(Object.keys(packages).map(async (packageId) => {
-    let version = packages[packageId]
-    let installedVersion = installedPackages["node_modules/" + packageId]["version"]
-    let md = await GetFormattedPackageData(packageId)
-    packageMarkdown[packageId] = "|" + version + "|" + installedVersion + md;
+    packageMarkdown[packageId] = await GetFormattedPackageData(packageId, installedPackages)
   }))
 
   let md = "";
@@ -54,10 +77,20 @@ const main = async () => {
   let md = `# NPM Packages
 
 *Last Updated ${date.toLocaleDateString()} ${date.toLocaleTimeString()}*
-    
-|Version|Installed Version|Package Name|Description|License|Repository|NPM|Vulnerabilities|
-|-------|-----------------|------------|-----------|-------|----------|---|---------------|
-${await GetAllPackagesFormatted(packages, installedPackages)}`
+
+| |Version|Latest|Package Name|Description|License|NPM|Vulnerabilities|
+|-|-------|------|------------|-----------|-------|---|---------------|
+${await GetAllPackagesFormatted(packages, installedPackages)}
+
+# Key
+
+|Icon|Description|
+|----|-----------|
+|✔|Package is on latest version|
+|ℹ|Newer patch available|
+|⚠|Newer minor version available|
+|❌|Newer major version available|
+`
 
   writeFileSync(MARKDOWN_PATH, md)
   console.log("Done")
